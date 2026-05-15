@@ -21,7 +21,7 @@ st.set_page_config(
 st.markdown("""
 <style>
     /* Tighten layout */
-    .block-container {padding-top: 2.5rem; padding-bottom: 3rem; max-width: 880px;}
+    .block-container {padding-top: 2.5rem; padding-bottom: 3rem; max-width: 960px;}
 
     /* Hide streamlit chrome */
     #MainMenu, footer, header {visibility: hidden;}
@@ -74,59 +74,96 @@ st.markdown("""
         display: flex;
         justify-content: space-between;
         align-items: baseline;
-        margin-bottom: 1rem;
+        margin-bottom: 1.2rem;
     }
     .rr-title {font-size: 1.05rem; font-weight: 600;}
     .rr-meta  {font-size: 0.8rem;  opacity: 0.6;}
 
-    .rr-stats {
+    /* Comparison grid: portfolio | nifty 500 */
+    .compare-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        margin-bottom: 1.2rem;
+    }
+    .compare-col {
+        padding: 1rem 1.1rem;
+        border-radius: 10px;
+        background: rgba(128, 128, 128, 0.06);
+    }
+    .compare-col.portfolio {
+        background: rgba(59, 130, 246, 0.08);
+        border: 1px solid rgba(59, 130, 246, 0.25);
+    }
+    .compare-col.benchmark {
+        background: rgba(128, 128, 128, 0.06);
+        border: 1px solid rgba(128, 128, 128, 0.2);
+    }
+    .compare-header {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 0.85rem;
+    }
+    .dot {
+        width: 8px; height: 8px; border-radius: 50%;
+        display: inline-block;
+    }
+    .dot.portfolio  {background: #3b82f6;}
+    .dot.benchmark  {background: #9ca3af;}
+
+    .compare-stats {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
-        gap: 1.5rem;
+        gap: 0.75rem;
     }
-    .rr-stat-label {
-        font-size: 0.72rem;
+    .compare-stat-label {
+        font-size: 0.65rem;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.06em;
         opacity: 0.55;
-        margin-bottom: 0.3rem;
+        margin-bottom: 0.2rem;
     }
-    .rr-stat-value {
-        font-size: 1.6rem;
+    .compare-stat-value {
+        font-size: 1.25rem;
         font-weight: 700;
         letter-spacing: -0.02em;
         line-height: 1.1;
     }
+
+    /* Verdict badge — portfolio beat / lagged benchmark on median */
+    .verdict {
+        text-align: center;
+        font-size: 0.85rem;
+        font-weight: 600;
+        padding: 0.65rem 1rem;
+        border-radius: 8px;
+        margin-top: 0.4rem;
+    }
+    .verdict.win {
+        background: rgba(16, 185, 129, 0.12);
+        color: #10b981;
+        border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .verdict.loss {
+        background: rgba(239, 68, 68, 0.12);
+        color: #ef4444;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    .verdict.tie {
+        background: rgba(128, 128, 128, 0.1);
+        opacity: 0.75;
+        border: 1px solid rgba(128, 128, 128, 0.25);
+    }
+
     .pos {color: #10b981;}
     .neg {color: #ef4444;}
     .neu {color: inherit;}
-
-    /* Range bar showing min→max with median marker */
-    .range-bar {
-        position: relative;
-        height: 6px;
-        background: linear-gradient(to right, #fee2e2 0%, #fef3c7 50%, #d1fae5 100%);
-        border-radius: 3px;
-        margin-top: 1.25rem;
-    }
-    .range-marker {
-        position: absolute;
-        top: -3px;
-        width: 12px;
-        height: 12px;
-        background: currentColor;
-        border-radius: 50%;
-        border: 2px solid rgba(255, 255, 255, 0.9);
-        box-shadow: 0 1px 3px rgba(0,0,0,0.4);
-    }
-    .range-labels {
-        display: flex;
-        justify-content: space-between;
-        font-size: 0.7rem;
-        opacity: 0.55;
-        margin-top: 0.5rem;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -140,6 +177,8 @@ FILES = {
     "Mid Cap":   "midcap.xlsx",
     "Small Cap": "smallcap.xlsx",
 }
+
+BENCHMARK_FILE = "nifty500.xlsx"
 
 
 @st.cache_data(show_spinner=False)
@@ -160,7 +199,18 @@ def load_category(path: str, category: str) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
-def load_all() -> tuple[pd.DataFrame, dict]:
+def load_benchmark(path: str) -> pd.Series:
+    """Load Nifty 500 close prices as a single time series."""
+    raw = pd.read_excel(path, header=None)
+    data = raw.iloc[3:, [1, 2]].copy()
+    data.columns = ["Date", "Close"]
+    data["Date"] = pd.to_datetime(data["Date"], errors="coerce")
+    data["Close"] = pd.to_numeric(data["Close"], errors="coerce")
+    return data.dropna().set_index("Date").sort_index()["Close"]
+
+
+@st.cache_data(show_spinner=False)
+def load_all() -> tuple[pd.DataFrame, dict, pd.Series]:
     frames, catalogue = [], {}
     for cat, fname in FILES.items():
         p = DATA_DIR / fname
@@ -170,7 +220,13 @@ def load_all() -> tuple[pd.DataFrame, dict]:
         frames.append(df)
         catalogue[cat] = [c for _, c in df.columns]
     nav = pd.concat(frames, axis=1).sort_index().ffill(limit=5)
-    return nav, catalogue
+
+    bench_path = DATA_DIR / BENCHMARK_FILE
+    if not bench_path.exists():
+        st.error(f"Missing benchmark file: {bench_path}"); st.stop()
+    benchmark = load_benchmark(str(bench_path))
+
+    return nav, catalogue, benchmark
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +254,7 @@ def rolling_cagr(series: pd.Series, window_days: int) -> pd.Series:
 # Load data
 # ---------------------------------------------------------------------------
 with st.spinner("Loading fund data..."):
-    nav, catalogue = load_all()
+    nav, catalogue, benchmark = load_all()
 
 
 def pick_oldest(cat: str) -> str:
@@ -216,8 +272,8 @@ def pick_oldest(cat: str) -> str:
 # ---------------------------------------------------------------------------
 st.markdown("# Portfolio Rolling Returns")
 st.markdown(
-    '<div class="subtitle">Build a portfolio, see how it would have performed '
-    'over every 1-year, 3-year, and 5-year window in history.</div>',
+    '<div class="subtitle">Build a portfolio and see how it would have performed '
+    'over every 1, 3, and 5-year window — compared against the Nifty 500.</div>',
     unsafe_allow_html=True,
 )
 
@@ -320,6 +376,10 @@ if portfolio.empty or len(portfolio) < 252:
     )
     st.stop()
 
+# Align benchmark to the same period as the portfolio for apples-to-apples
+bench = benchmark.loc[portfolio.index[0]:portfolio.index[-1]].copy()
+bench = bench.reindex(portfolio.index).ffill()
+
 # Rolling returns
 windows = [
     ("1-Year Returns", 252),
@@ -327,7 +387,7 @@ windows = [
     ("5-Year Returns", 252 * 5),
 ]
 
-st.markdown('<div class="section-label">Historical rolling returns</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-label">Portfolio vs Nifty 500</div>', unsafe_allow_html=True)
 
 period_start = portfolio.index[0].strftime("%b %Y")
 period_end   = portfolio.index[-1].strftime("%b %Y")
@@ -347,14 +407,29 @@ def color_for(v):
 
 def stat_html(label, value, klass="neu"):
     return (
-        f'<div><div class="rr-stat-label">{label}</div>'
-        f'<div class="rr-stat-value {klass}">{value}</div></div>'
+        f'<div><div class="compare-stat-label">{label}</div>'
+        f'<div class="compare-stat-value {klass}">{value}</div></div>'
+    )
+
+
+def column_html(name, dot_class, stats):
+    """stats = [(label, value_str, color_class), ...]"""
+    inner = "".join(stat_html(l, v, c) for l, v, c in stats)
+    return (
+        f'<div class="compare-col {dot_class}">'
+        f'  <div class="compare-header">'
+        f'    <span class="dot {dot_class}"></span>{name}'
+        f'  </div>'
+        f'  <div class="compare-stats">{inner}</div>'
+        f'</div>'
     )
 
 
 for title, days in windows:
-    rr = rolling_cagr(portfolio, days)
-    if rr.empty:
+    rr_p = rolling_cagr(portfolio, days)
+    rr_b = rolling_cagr(bench,     days)
+
+    if rr_p.empty:
         st.markdown(
             f'<div class="rr-card">'
             f'<div class="rr-header">'
@@ -369,33 +444,51 @@ for title, days in windows:
         )
         continue
 
-    mn, md, mx = rr.min(), rr.median(), rr.max()
-    pos_pct = (rr > 0).mean() * 100
+    pmn, pmd, pmx = rr_p.min(), rr_p.median(), rr_p.max()
+    bmn, bmd, bmx = rr_b.min(), rr_b.median(), rr_b.max()
+    pos_pct = (rr_p > 0).mean() * 100
 
-    if mx > mn:
-        marker_pct = (md - mn) / (mx - mn) * 100
+    portfolio_col = column_html(
+        "Your Portfolio", "portfolio",
+        [
+            ("Min",    f"{pmn*100:.1f}%", color_for(pmn)),
+            ("Median", f"{pmd*100:.1f}%", color_for(pmd)),
+            ("Max",    f"{pmx*100:.1f}%", color_for(pmx)),
+        ],
+    )
+
+    benchmark_col = column_html(
+        "Nifty 500", "benchmark",
+        [
+            ("Min",    f"{bmn*100:.1f}%", color_for(bmn)),
+            ("Median", f"{bmd*100:.1f}%", color_for(bmd)),
+            ("Max",    f"{bmx*100:.1f}%", color_for(bmx)),
+        ],
+    )
+
+    # Verdict: did portfolio beat benchmark on median?
+    diff = pmd - bmd
+    if abs(diff) < 0.005:
+        verdict_class = "tie"
+        verdict_text = f"In line with Nifty 500 ({diff*100:+.1f}% on median)"
+    elif diff > 0:
+        verdict_class = "win"
+        verdict_text = f"↑ Portfolio beat Nifty 500 by {diff*100:.1f}% on median"
     else:
-        marker_pct = 50
+        verdict_class = "loss"
+        verdict_text = f"↓ Portfolio lagged Nifty 500 by {abs(diff)*100:.1f}% on median"
 
     st.markdown(
         f'<div class="rr-card">'
         f'  <div class="rr-header">'
         f'    <div class="rr-title">{title}</div>'
-        f'    <div class="rr-meta">{len(rr):,} windows · {pos_pct:.0f}% positive</div>'
+        f'    <div class="rr-meta">{len(rr_p):,} windows · portfolio positive in {pos_pct:.0f}%</div>'
         f'  </div>'
-        f'  <div class="rr-stats">'
-        f'    {stat_html("Minimum", f"{mn*100:.1f}%", color_for(mn))}'
-        f'    {stat_html("Median",  f"{md*100:.1f}%", color_for(md))}'
-        f'    {stat_html("Maximum", f"{mx*100:.1f}%", color_for(mx))}'
+        f'  <div class="compare-grid">'
+        f'    {portfolio_col}'
+        f'    {benchmark_col}'
         f'  </div>'
-        f'  <div class="range-bar">'
-        f'    <div class="range-marker" style="left: calc({marker_pct}% - 6px);"></div>'
-        f'  </div>'
-        f'  <div class="range-labels">'
-        f'    <span>{mn*100:.0f}%</span>'
-        f'    <span>median</span>'
-        f'    <span>{mx*100:.0f}%</span>'
-        f'  </div>'
+        f'  <div class="verdict {verdict_class}">{verdict_text}</div>'
         f'</div>',
         unsafe_allow_html=True,
     )
