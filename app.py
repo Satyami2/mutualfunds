@@ -174,6 +174,8 @@ DATA_DIR = Path(__file__).parent
 
 FILES = {
     "Large Cap": "largecap.xlsx",
+    "Flexi Cap": "flexicap.xlsx",
+    "Multi Cap": "multicap.xlsx",
     "Mid Cap":   "midcap.xlsx",
     "Small Cap": "smallcap.xlsx",
 }
