@@ -28,7 +28,7 @@ st.markdown("""
 
     /* Headline */
     h1 {font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.2rem;}
-    .subtitle {color: #6b7280; font-size: 0.95rem; margin-bottom: 2rem;}
+    .subtitle {opacity: 0.6; font-size: 0.95rem; margin-bottom: 2rem;}
 
     /* Selection cards */
     [data-testid="stVerticalBlockBorderWrapper"] {
@@ -36,17 +36,20 @@ st.markdown("""
         border-color: #e5e7eb !important;
     }
 
-    /* Buttons */
+    /* Buttons — theme-aware, inherit text color from Streamlit */
     .stButton button {
         border-radius: 8px;
-        border: 1px solid #e5e7eb;
-        background: white;
+        border: 1px solid rgba(128, 128, 128, 0.3);
+        background: transparent;
         font-weight: 500;
         transition: all 0.15s;
     }
     .stButton button:hover {
-        border-color: #111;
-        background: #fafafa;
+        border-color: rgba(128, 128, 128, 0.7);
+        background: rgba(128, 128, 128, 0.08);
+    }
+    .stButton button p {
+        font-weight: 500;
     }
 
     /* Section headers */
@@ -55,14 +58,14 @@ st.markdown("""
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.08em;
-        color: #6b7280;
+        opacity: 0.55;
         margin: 2rem 0 0.75rem 0;
     }
 
-    /* Rolling return cards */
+    /* Rolling return cards — theme-aware */
     .rr-card {
-        background: white;
-        border: 1px solid #e5e7eb;
+        background: rgba(128, 128, 128, 0.05);
+        border: 1px solid rgba(128, 128, 128, 0.2);
         border-radius: 14px;
         padding: 1.4rem 1.5rem;
         margin-bottom: 0.85rem;
@@ -73,8 +76,8 @@ st.markdown("""
         align-items: baseline;
         margin-bottom: 1rem;
     }
-    .rr-title {font-size: 1.05rem; font-weight: 600; color: #111;}
-    .rr-meta  {font-size: 0.8rem;  color: #9ca3af;}
+    .rr-title {font-size: 1.05rem; font-weight: 600;}
+    .rr-meta  {font-size: 0.8rem;  opacity: 0.6;}
 
     .rr-stats {
         display: grid;
@@ -86,7 +89,7 @@ st.markdown("""
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.06em;
-        color: #9ca3af;
+        opacity: 0.55;
         margin-bottom: 0.3rem;
     }
     .rr-stat-value {
@@ -95,9 +98,9 @@ st.markdown("""
         letter-spacing: -0.02em;
         line-height: 1.1;
     }
-    .pos {color: #059669;}
-    .neg {color: #dc2626;}
-    .neu {color: #111;}
+    .pos {color: #10b981;}
+    .neg {color: #ef4444;}
+    .neu {color: inherit;}
 
     /* Range bar showing min→max with median marker */
     .range-bar {
@@ -112,16 +115,16 @@ st.markdown("""
         top: -3px;
         width: 12px;
         height: 12px;
-        background: #111;
+        background: currentColor;
         border-radius: 50%;
-        border: 2px solid white;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        border: 2px solid rgba(255, 255, 255, 0.9);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.4);
     }
     .range-labels {
         display: flex;
         justify-content: space-between;
         font-size: 0.7rem;
-        color: #9ca3af;
+        opacity: 0.55;
         margin-top: 0.5rem;
     }
 </style>
