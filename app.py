@@ -263,9 +263,9 @@ NAV_FILES = {
     "Small Cap": "smallcap.xlsx",
 }
 BENCHMARK_FILE = "nifty500.xlsx"
-ASSETTYPE_FILE = "assettype_allocations.xlsx"
-SECTOR_FILE    = "sector_allocation.xlsx"
-STOCKS_FILE    = "stock_allocations.xlsx"
+ASSETTYPE_FILE = "assettype allocations.xlsx"
+SECTOR_FILE    = "sector allocation.xlsx"
+STOCKS_FILE    = "stock allocations.xlsx"
 AMFI_FILE      = "AMFI_LargeCap_MidCap_Companies.xlsx"
 
 
