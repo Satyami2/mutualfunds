@@ -300,41 +300,67 @@ def load_benchmark(path: str) -> pd.Series:
 
 @st.cache_data(show_spinner=False)
 def load_holdings():
-    """Load all three holdings files (asset type, sector, stocks)."""
+    """Load all three holdings files (asset type, sector, stocks).
+    Returns (asset_df, sector_df, stock_df, missing_files).
+    Missing files yield empty dataframes so the app degrades gracefully."""
+    missing = []
+    empty_at = pd.DataFrame(columns=["Scheme", "AssetType", "Allocation"])
+    empty_sec = pd.DataFrame(columns=["Scheme", "Sector", "Allocation"])
+    empty_stk = pd.DataFrame(columns=["Scheme", "Stock", "Sector", "Allocation"])
+
     # Asset type
-    at = pd.read_excel(DATA_DIR / ASSETTYPE_FILE, header=3)
-    at.columns = ["Scheme", "AssetType", "Allocation"]
-    at = at.dropna(subset=["Scheme", "AssetType"])
-    at = at[~at["Scheme"].astype(str).str.contains("Accord", na=False)]
-    at["Allocation"] = pd.to_numeric(at["Allocation"], errors="coerce")
-    at = at.dropna(subset=["Allocation"])
+    p = DATA_DIR / ASSETTYPE_FILE
+    if p.exists():
+        at = pd.read_excel(p, header=3)
+        at.columns = ["Scheme", "AssetType", "Allocation"]
+        at = at.dropna(subset=["Scheme", "AssetType"])
+        at = at[~at["Scheme"].astype(str).str.contains("Accord", na=False)]
+        at["Allocation"] = pd.to_numeric(at["Allocation"], errors="coerce")
+        at = at.dropna(subset=["Allocation"])
+    else:
+        at = empty_at
+        missing.append(ASSETTYPE_FILE)
 
     # Sector
-    sec = pd.read_excel(DATA_DIR / SECTOR_FILE, header=3)
-    sec.columns = ["Scheme", "Sector", "AsOnDate", "Allocation"]
-    sec = sec.dropna(subset=["Scheme", "Sector"])
-    sec = sec[~sec["Scheme"].astype(str).str.contains("Accord", na=False)]
-    sec["Allocation"] = pd.to_numeric(sec["Allocation"], errors="coerce")
-    sec = sec.dropna(subset=["Allocation"])
-    sec = sec[["Scheme", "Sector", "Allocation"]]
+    p = DATA_DIR / SECTOR_FILE
+    if p.exists():
+        sec = pd.read_excel(p, header=3)
+        sec.columns = ["Scheme", "Sector", "AsOnDate", "Allocation"]
+        sec = sec.dropna(subset=["Scheme", "Sector"])
+        sec = sec[~sec["Scheme"].astype(str).str.contains("Accord", na=False)]
+        sec["Allocation"] = pd.to_numeric(sec["Allocation"], errors="coerce")
+        sec = sec.dropna(subset=["Allocation"])
+        sec = sec[["Scheme", "Sector", "Allocation"]]
+    else:
+        sec = empty_sec
+        missing.append(SECTOR_FILE)
 
     # Stocks
-    stk = pd.read_excel(DATA_DIR / STOCKS_FILE, header=3)
-    stk.columns = ["Scheme", "Stock", "Sector", "AsOnDate", "Allocation"]
-    stk = stk.dropna(subset=["Scheme", "Stock"])
-    stk = stk[~stk["Scheme"].astype(str).str.contains("Accord", na=False)]
-    stk["Allocation"] = pd.to_numeric(stk["Allocation"], errors="coerce")
-    stk = stk.dropna(subset=["Allocation"])
-    stk = stk[["Scheme", "Stock", "Sector", "Allocation"]]
+    p = DATA_DIR / STOCKS_FILE
+    if p.exists():
+        stk = pd.read_excel(p, header=3)
+        stk.columns = ["Scheme", "Stock", "Sector", "AsOnDate", "Allocation"]
+        stk = stk.dropna(subset=["Scheme", "Stock"])
+        stk = stk[~stk["Scheme"].astype(str).str.contains("Accord", na=False)]
+        stk["Allocation"] = pd.to_numeric(stk["Allocation"], errors="coerce")
+        stk = stk.dropna(subset=["Allocation"])
+        stk = stk[["Scheme", "Stock", "Sector", "Allocation"]]
+    else:
+        stk = empty_stk
+        missing.append(STOCKS_FILE)
 
-    return at, sec, stk
+    return at, sec, stk, missing
 
 
 @st.cache_data(show_spinner=False)
 def load_amfi_classification():
-    """Returns dict: normalized stock name -> 'Large Cap' / 'Mid Cap'."""
-    amfi = pd.read_excel(DATA_DIR / AMFI_FILE, header=3)
-    return {_normalize_stock(n): cat for n, cat in zip(amfi["Company Name"], amfi["Category"])}
+    """Returns (dict, missing_flag). Dict: normalized stock name -> 'Large Cap' / 'Mid Cap'.
+    If the AMFI file is missing, returns an empty dict so all stocks become Small Cap."""
+    p = DATA_DIR / AMFI_FILE
+    if not p.exists():
+        return {}, True
+    amfi = pd.read_excel(p, header=3)
+    return {_normalize_stock(n): cat for n, cat in zip(amfi["Company Name"], amfi["Category"])}, False
 
 
 def _normalize_stock(name) -> str:
@@ -355,16 +381,24 @@ def load_all():
     for cat, fname in NAV_FILES.items():
         p = DATA_DIR / fname
         if not p.exists():
-            st.error(f"Missing data file: {p}"); st.stop()
+            st.error(f"Missing required NAV file: {fname}. Add it to your repo.")
+            st.stop()
         df = load_category(str(p), cat)
         frames.append(df)
         catalogue[cat] = [c for _, c in df.columns]
     nav = pd.concat(frames, axis=1, sort=False).sort_index().ffill(limit=5)
 
-    bench = load_benchmark(str(DATA_DIR / BENCHMARK_FILE))
-    asset_df, sector_df, stock_df = load_holdings()
-    amfi_map = load_amfi_classification()
-    return nav, catalogue, bench, asset_df, sector_df, stock_df, amfi_map
+    bench_path = DATA_DIR / BENCHMARK_FILE
+    if not bench_path.exists():
+        st.error(f"Missing required benchmark file: {BENCHMARK_FILE}. Add it to your repo.")
+        st.stop()
+    bench = load_benchmark(str(bench_path))
+
+    asset_df, sector_df, stock_df, missing_holdings = load_holdings()
+    amfi_map, amfi_missing = load_amfi_classification()
+    if amfi_missing:
+        missing_holdings.append(AMFI_FILE)
+    return nav, catalogue, bench, asset_df, sector_df, stock_df, amfi_map, missing_holdings
 
 
 # =============================================================================
@@ -428,7 +462,7 @@ def covered_funds(funds: list, df: pd.DataFrame) -> tuple[list, list]:
 # Load data
 # =============================================================================
 with st.spinner("Loading fund data..."):
-    nav, catalogue, benchmark, asset_df, sector_df, stock_df, amfi_map = load_all()
+    nav, catalogue, benchmark, asset_df, sector_df, stock_df, amfi_map, missing_holdings = load_all()
 
 
 def pick_oldest(cat: str) -> str:
@@ -544,11 +578,31 @@ if abs(total - 100) > 0.01:
 
 
 # =============================================================================
-# View selector
+# View selector — holdings views are disabled if their data file is missing
 # =============================================================================
 st.markdown('<div class="section-label">What do you want to see?</div>', unsafe_allow_html=True)
+
+views_all = ["📈 Rolling Returns", "🥧 Market Cap", "🏭 Sectors", "🏢 Top Stocks"]
+
+# Decide which views are unavailable
+disabled_reasons = {}
+if stock_df.empty:
+    disabled_reasons["🥧 Market Cap"] = STOCKS_FILE
+    disabled_reasons["🏢 Top Stocks"] = STOCKS_FILE
+if sector_df.empty:
+    disabled_reasons["🏭 Sectors"] = SECTOR_FILE
+
+views_available = [v for v in views_all if v not in disabled_reasons]
+
+if missing_holdings:
+    files_str = ", ".join(f"`{f}`" for f in missing_holdings)
+    st.info(
+        f"ℹ️ Holdings views are disabled. To enable them, add these file(s) to "
+        f"your repo: {files_str}"
+    )
+
 view = st.radio(
-    "View", ["📈 Rolling Returns", "🥧 Market Cap", "🏭 Sectors", "🏢 Top Stocks"],
+    "View", views_available,
     horizontal=True, label_visibility="collapsed",
 )
 st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
