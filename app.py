@@ -995,14 +995,3 @@ elif view.endswith("Sectors"):
     render_sectors()
 elif view.endswith("Top Stocks"):
     render_top_stocks()
-
-
-# =============================================================================
-# Footer
-# =============================================================================
-st.markdown(
-    '<div style="text-align:center; opacity:0.4; font-size:0.75rem; margin-top:2.5rem;">'
-    'Past performance is not indicative of future results.'
-    '</div>',
-    unsafe_allow_html=True,
-)
